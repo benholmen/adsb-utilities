@@ -1,11 +1,12 @@
 <?php
     // define('SOURCE_FILE', '/run/dump1090-fa/aircraft.json');
     define('SLEEP_TIME', 3);
-    define('SOURCE_FILE', 'home/pi/adsb-utilities/sample-aircraft.json');
+    define('SEEN_COUNT_DELAY', 60); // How long between plane spottings before we count it as a new spotting
+    define('SOURCE_FILE', '/home/pi/adsb-utilities/sample-aircraft.json');
     define('JSON_DATABASE_URL', 'https://raw.githubusercontent.com/Mictronics/readsb-protobuf/dev/webapp/src/db/aircrafts.json');
     // define('DB_FILE', '/home/pi/aircraft.db');
     define('DB_FILE', '/home/pi/adsb-utilities/aircraft.db');
-    define('TMP_DB_FILE', '/dev/shm/'); // much faster to initialize database in memory
+    define('TMP_DB_FILE', '/dev/shm/aircraft-tmp.db'); // much faster to initialize database in memory
 
     /** USAGE
      *  Before running the first time, run aircraft_stats.php --init to create a new SQLite DB
@@ -17,32 +18,35 @@
 
     // Set up and populate a table of aircraft tail numbers and types
     if (in_array('--init', $argv)) {
-        echo "Initializing in memory at {TMP_DB_FILE}...";
+        echo "Initializing in memory at " . TMP_DB_FILE . "...";
         $db = new SQLite3(TMP_DB_FILE);
 
         createAircraftSeenTable();
         createAircraftTable();
+
+        echo "done.\n";
+
         loadJsonToAircraftTable();
 
         echo "done.\n";
-        echo "Moving {TMP_DB_FILE} to {DB_FILE}\n";
+        echo "Moving " . TMP_DB_FILE . " to " . DB_FILE . "\n";
 
         rename(TMP_DB_FILE, DB_FILE);
     }
-    elseif (in_array('--refresh')) {
-        echo "Refreshing in memory at {TMP_DB_FILE}...";
+    elseif (in_array('--refresh', $argv)) {
+        echo "Refreshing in memory at " . TMP_DB_FILE . "...";
         $db = new SQLite3(TMP_DB_FILE);
 
         loadJsonToAircraftTable();
 
         echo "done.\n";
-        echo "Moving {TMP_DB_FILE} to {DB_FILE}\n";
+        echo "Moving " . TMP_DB_FILE . " to " . DB_FILE . "\n";
 
         rename(TMP_DB_FILE, DB_FILE);
     }
 
     if (!file_exists(DB_FILE)) {
-        echo "Missing database {DB_FILE}, did you intialize with --init?\n";
+        echo "Missing database " . DB_FILE . ", did you intialize with --init?\n";
     }
 
     $db = new SQLite3(DB_FILE);
@@ -61,10 +65,7 @@
     {
         global $db;
 
-        $stmt = $db->prepare("SELECT * FROM aircraft WHERE hex = :hex");
-        $result = $stmt->bindValue('hex', $hex);
-
-        return $result->fetchArray();
+        return $db->querySingle("SELECT * FROM aircraft WHERE LOWER(hex) = LOWER('{$hex}')", true);
     }
 
 
@@ -85,6 +86,8 @@
                     max_altitude = MAX(max_altitude, {$aircraft->alt_geom}),
                     min_speed = MIN(min_speed, {$aircraft->gs}),
                     max_speed = MAX(max_speed, {$aircraft->gs}),
+                    min_distance = MIN(min_distance, {$distance}),
+                    max_distance = MAX(max_distance, {$distance}),
                     seen_count = {$seenCount},
                     last_seen = datetime('now')
                 WHERE
@@ -100,6 +103,8 @@
                     max_altitude = {$aircraft->alt_geom},
                     min_speed = {$aircraft->gs},
                     max_speed = {$aircraft->gs},
+                    min_distance = {$distance},
+                    max_distance = {$distance},
                     seen_count = 1,
                     first_seen = datetime('now'),
                     last_seen = datetime('now')
@@ -109,16 +114,16 @@
 
     function tailFromHex($hex)
     {
-        global $db;
+        $aircraft = getAircraft($hex);
 
-        return $db->querySingle("SELECT tail FROM aircraft WHERE hex = '{$hex}'");
+        return $aircraft['tail'];
     }
 
     function typeFromHex($hex)
     {
-        global $db;
+        $aircraft = getAircraft($hex);
 
-        return $db->querySingle("SELECT type FROM aircraft WHERE hex = '{$hex}'");
+        return $aircraft['type'];
     }
 
     function createAircraftSeenTable(): void
@@ -144,15 +149,18 @@
     {
         global $db;
 
-        $db->exec("DROP TABLE aircraft");
+        $db->exec("DROP TABLE IF EXISTS aircraft");
         $db->exec('
             CREATE TABLE "aircraft" (
-                "id"	    INTEGER UNIQUE,
-                "hex"	    TEXT UNIQUE,
-                "tail"	    TEXT,
-                "type"	    TEXT,
-                "updated"	TEXT,
+                "id"	        INTEGER UNIQUE,
+                "hex"	        TEXT UNIQUE,
+                "hex_to_int"    INTEGER UNIQUE,
+                "tail"	        TEXT,
+                "type"	        TEXT,
+                "updated"	    TEXT,
                 PRIMARY KEY("id" AUTOINCREMENT)
+                UNIQUE("hex")
+                UNIQUE("hex_to_int")
             )');
     }
 
@@ -168,7 +176,8 @@
 
         $inserted = 0;
         foreach ($tailDbCache as $hex => $meta) {
-            $db->exec("INSERT INTO aircraft (hex, tail, type, updated) VALUES ('{$hex}', '{$meta[0]}', '{$meta[1]}', DATETIME('now'))");
+            $hex_to_int = hexdec($hex);
+            $db->exec("INSERT INTO aircraft (hex, hex_to_int, tail, type, updated) VALUES ('{$hex}', {$hex_to_int}, '{$meta[0]}', '{$meta[1]}', DATETIME('now'))");
             $inserted++;
         }
 
