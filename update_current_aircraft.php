@@ -29,7 +29,6 @@
 
         loadJsonToAircraftMetaTable();
 
-        echo "done.\n";
         echo "Moving " . TMP_DB_FILE . " to " . DB_FILE . "...";
 
         rename(TMP_DB_FILE, DB_FILE);
@@ -43,7 +42,6 @@
 
         loadJsonToAircraftMetaTable();
 
-        echo "done.\n";
         echo "Moving " . TMP_DB_FILE . " to " . DB_FILE . "...";
 
         rename(TMP_DB_FILE, DB_FILE);
@@ -65,12 +63,18 @@
         foreach ($allAdsbAircraft as $adsbAircraft) {
             $aircraftMeta = getAircraftMeta($adsbAircraft->hex);
 
-            $currentAircraftReadable[] = $aircraftMeta['tail'] . ' (' . $aircraftMeta['type'] . ')';
+            if ($aircraftMeta) {
+                $currentAircraftReadable[] = $aircraftMeta['tail'] . ' (' . $aircraftMeta['type'] . ')';
+            } else {
+                $currentAircraftReadable[] = $adsbAircraft->hex . ' (??)';
+            }
 
             updateAircraft($adsbAircraft);
         }
         echo date('Y-m-d H:i') . "\tTracking " . count($currentAircraftReadable) . " aircraft\n";
         echo implode(', ', $currentAircraftReadable) . "\n";
+
+        displaySummaryStats();
 
         sleep(SLEEP_TIME);
     }
@@ -98,7 +102,6 @@
 
         foreach(['alt_geom', 'lat', 'lon', 'gs'] as $requiredDataField)
         if (!isset($aircraft->$requiredDataField)) {
-            echo "No {$requiredDataField} for {$aircraft->hex}, skipping\n";
             return;
         }
 
@@ -106,7 +109,7 @@
 
         if ($dbAircraft = getAircraft($aircraft->hex)) {
             $seenCount = $dbAircraft['seen_count'];
-            if (strtotime($dbAircraft['last_seen']) - time() > SEEN_COUNT_DELAY) {
+            if (strtotime($dbAircraft['last_seen'] . ' UTC') - time() > SEEN_COUNT_DELAY) {
                 $seenCount++;
             }
 
@@ -133,9 +136,25 @@
         }
     }
 
-    function distanceFromHome($lat, $lng, $unit = 'nm') {
+    function displaySummaryStats(): void
+    {
+        global $db;
+
+        $result = $db->query("
+            SELECT *
+            FROM
+                aircraft_seen
+                JOIN aircraft_meta USING (hex)
+            ORDER BY seen_count DESC, last_seen DESC
+            LIMIT 10";
+
+        foreach($result->get)
+    }
+
+    function distanceFromHome($lat, $lng, $unit = 'nm'): float
+    {
         if ($unit == 'nm') {
-            $earth_radius = 3961 * 1.151; // NAUTICAL MILES
+            $earth_radius = 3961 / 1.151; // NAUTICAL MILES
         } else {
             $earth_radius = 3961; // MILES
         }
@@ -147,7 +166,7 @@
         $c = 2 * asin(sqrt($a));
         $d = $earth_radius * $c;
 
-        return number_format($d, 1, ".", "");
+        return floatval($d);
     }
 
     function createAircraftSeenTable(): void
@@ -213,8 +232,9 @@
 
             if ($inserted % 1000 === 0) {
                 $elapsed = time() - $starttime;
-                $remaining = round(count($tailDbCache) * $elapsed / $inserted);
-                echo number_format($inserted) . " completed in {$elapsed}sec ({$remaining}sec remaining)\r";
+                $remaining = round(count($tailDbCache) * $elapsed / $inserted) - $elapsed;
+                echo "> " . number_format($inserted) . " completed in {$elapsed} sec (approx {$remaining} sec remaining)  \r";
             }
         }
+        echo "\n";
     }
