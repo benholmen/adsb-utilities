@@ -136,23 +136,31 @@
     {
         global $db;
 
+        $max_age_minutes = 10;
+
         $result = $db->query("
             SELECT *
             FROM
                 aircraft_seen
                 LEFT JOIN aircraft_meta USING (hex)
             WHERE
-                last_seen > datetime('now', '-10 minutes')
+                last_seen > datetime('now', '-{$max_age_minutes} minutes')
             ORDER BY seen_count DESC, last_seen DESC, min_distance ASC
             LIMIT 50");
 
-        echo "TAIL\tTYPE\tSEEN\tMIN DISTANCE\tLINK\n";
-        echo "----\t----\t----\t------------\t----\n";
+        echo "\nHEX\tTAIL\tTYPE\tSEEN\tMIN DISTANCE\tLINK\n";
+        echo "---\t----\t----\t----\t------------\t----\n";
+
+        $count = 0;
+
         while ($aircraft = $result->fetchArray(SQLITE3_ASSOC)) {
             $min_distance = number_format($aircraft['min_distance'], 1);
             $link = 'https://globe.adsbexchange.com/?icao=' . strtolower($aircraft['hex']);
-            echo "{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$min_distance}\t\t{$link}\n";
+            echo "{$aircraft['hex']}\t{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$min_distance}\t\t{$link}\n";
+
+            $count++;
         }
+        echo "--- {$count} in last {$max_age_minutes} min ------\n";
     }
 
     function distanceFromHome($lat, $lng, $unit = 'nm'): float
