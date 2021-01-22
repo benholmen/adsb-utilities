@@ -104,7 +104,8 @@
 
         if ($dbAircraft = getAircraft($aircraft->hex)) {
             $seenCount = $dbAircraft['seen_count'];
-            if (strtotime($dbAircraft['last_seen'] . ' UTC') - time() > SEEN_COUNT_DELAY) {
+            $timeSinceLastSeen = time() - strtotime($dbAircraft['last_seen'] . ' UTC');
+            if ($timeSinceLastSeen > SEEN_COUNT_DELAY) {
                 $seenCount++;
             }
 
