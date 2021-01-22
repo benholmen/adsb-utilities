@@ -1,7 +1,7 @@
 <?php
     define('SOURCE_FILE', '/run/dump1090-fa/aircraft.json');
     // define('SOURCE_FILE', '/home/pi/adsb-utilities/sample-aircraft.json');
-    define('SLEEP_TIME', 3);
+    define('SLEEP_TIME', 10);
     define('SEEN_COUNT_DELAY', 10*60); // How long between plane spottings before we count it as a new spotting
     define('JSON_DATABASE_URL', 'https://raw.githubusercontent.com/Mictronics/readsb-protobuf/dev/webapp/src/db/aircrafts.json');
     define('DB_FILE', dirname(__FILE__) . '/aircraft.db');
