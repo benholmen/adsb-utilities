@@ -68,6 +68,8 @@
             } else {
                 $currentAircraftReadable[] = $adsbAircraft->hex . ' (??)';
             }
+            // Always use upper case for ICAO hex ID
+            $adsbAircraft->hex = strtoupper($adsbAircraft->hex);
 
             updateAircraft($adsbAircraft);
         }
@@ -104,6 +106,8 @@
         if (!isset($aircraft->$requiredDataField)) {
             return;
         }
+
+        $aircraft->hex = strtoupper($aircraft->hex);
 
         $distance = distanceFromHome($aircraft->lat, $aircraft->lon);
 
@@ -226,6 +230,7 @@
         $inserted = 0;
         foreach ($tailDbCache as $hex => $meta) {
             // Aircraft are referenced with a hex value. It's much faster to use INTs in Sqlite3
+            $hex = strtoupper($hex);
             $hex_to_int = hexdec($hex);
             $db->exec("INSERT INTO aircraft_meta (hex, hex_to_int, tail, type, updated) VALUES ('{$hex}', {$hex_to_int}, '{$meta[0]}', '{$meta[1]}', DATETIME('now'))");
             $inserted++;
