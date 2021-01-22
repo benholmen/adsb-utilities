@@ -61,20 +61,11 @@
         $currentAircraftReadable = [];
         $allAdsbAircraft = json_decode(file_get_contents(SOURCE_FILE))->aircraft;
         foreach ($allAdsbAircraft as $adsbAircraft) {
-            $aircraftMeta = getAircraftMeta($adsbAircraft->hex);
-
-            if ($aircraftMeta) {
-                $currentAircraftReadable[] = $aircraftMeta['tail'] . ' (' . $aircraftMeta['type'] . ')';
-            } else {
-                $currentAircraftReadable[] = $adsbAircraft->hex . ' (??)';
-            }
             // Always use upper case for ICAO hex ID
             $adsbAircraft->hex = strtoupper($adsbAircraft->hex);
 
             updateAircraft($adsbAircraft);
         }
-        echo date('Y-m-d H:i') . "\tTracking " . count($currentAircraftReadable) . " aircraft\n";
-        echo implode(', ', $currentAircraftReadable) . "\n";
 
         displaySummaryStats();
 
@@ -148,11 +139,19 @@
             SELECT *
             FROM
                 aircraft_seen
-                JOIN aircraft_meta USING (hex)
-            ORDER BY seen_count DESC, last_seen DESC
-            LIMIT 10";
+                LEFT JOIN aircraft_meta USING (hex)
+            WHERE
+                last_seen > datetime('now', '-10 minutes')
+            ORDER BY seen_count DESC, last_seen DESC, min_distance ASC
+            LIMIT 50");
 
-        foreach($result->get)
+        echo "TAIL\tTYPE\tSEEN\tMIN DISTANCE\tLINK\n";
+        echo "----\t----\t----\t------------\t----\n";
+        while ($aircraft = $result->fetchArray(SQLITE3_ASSOC)) {
+            $min_distance = number_format($aircraft['min_distance'], 1);
+            $link = 'https://globe.adsbexchange.com/?icao=' . strtolower($aircraft['hex']);
+            echo "{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$min_distance}\t\t{$link}\n";
+        }
     }
 
     function distanceFromHome($lat, $lng, $unit = 'nm'): float
