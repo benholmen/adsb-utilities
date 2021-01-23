@@ -7,7 +7,7 @@
     define('DB_FILE', dirname(__FILE__) . '/aircraft.db');
     define('TMP_DB_FILE', '/dev/shm/aircraft-tmp.db'); // much faster to initialize database in memory
     define('LAT_HOME',  44.8267759);
-    define('LNG_HOME', -91.5326822);
+    define('LON_HOME', -91.5326822);
 
     /** USAGE
      *  Before running the first time, run aircraft_stats.php --init to create a new SQLite DB
@@ -100,7 +100,7 @@
 
         $aircraft->hex = strtoupper($aircraft->hex);
 
-        $distance = distanceFromHome($aircraft->lat, $aircraft->lon);
+        $distance = distanceBetween($aircraft->lat, $aircraft->lon, LAT_HOME, LON_HOME);
 
         if ($dbAircraft = getAircraft($aircraft->hex)) {
             $seenCount = $dbAircraft['seen_count'];
@@ -163,7 +163,7 @@
         echo "--- {$count} in last {$max_age_minutes} min ------\n";
     }
 
-    function distanceFromHome($lat, $lng, $unit = 'nm'): float
+    function distanceBetween($lat1, $lon1, $lat2 = LAT_HOME, $lon2 = LON_HOME, $unit = 'nm'): float
     {
         if ($unit == 'nm') {
             $earth_radius = 3961 / 1.151; // NAUTICAL MILES
@@ -171,10 +171,10 @@
             $earth_radius = 3961; // MILES
         }
 
-        $dLat = deg2rad(LAT_HOME - $lat);
-        $dLon = deg2rad(LNG_HOME - $lng);
+        $dLat = deg2rad(LAT_HOME - $lat1);
+        $dLon = deg2rad(LON_HOME - $lon1);
 
-        $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat)) * cos(deg2rad(LAT_HOME)) * sin($dLon/2) * sin($dLon/2);
+        $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad(LAT_HOME)) * sin($dLon/2) * sin($dLon/2);
         $c = 2 * asin(sqrt($a));
         $d = $earth_radius * $c;
 
