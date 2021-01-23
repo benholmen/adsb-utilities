@@ -88,13 +88,38 @@
         return $db->querySingle("SELECT * FROM aircraft_seen WHERE hex = '{$hex}'", true);
     }
 
+    function hasEnoughData($aircraft): bool
+    {
+        foreach(['alt_geom', 'lat', 'lon', 'gs'] as $requiredDataField) {
+            if (!isset($aircraft->$requiredDataField)) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    function areTheyAtKEAU($aircraft): bool
+    {
+        global $db;
+        $MAX_ALTITUDE = 1500;
+        $MAX_DISTANCE = 1;
+
+        if (!hasEnoughData($aircraft)) {
+            return null;
+        }
+
+        if ($aircraft->alt_geom < $MAX_ALTITUDE && distanceBetween($aircraft->lat, $aircraft->lon, LAT_KEAU, LON_KEAU) < $MAX_DISTANCE) {
+            return true;
+        }
+
+        return false;
+    }
 
     function updateAircraft($aircraft): void
     {
         global $db;
 
-        foreach(['alt_geom', 'lat', 'lon', 'gs'] as $requiredDataField)
-        if (!isset($aircraft->$requiredDataField)) {
+        if (!hasEnoughData($aircraft)) {
             return;
         }
 
@@ -109,9 +134,15 @@
                 $seenCount++;
             }
 
+            $landedAtKEAU = $dbAircraft['landed_at_keau'];
+            if (!$landedAtKEAU) {
+                $landedAtKEAU = areTheyAtKEAU($aircraft);
+            }
+
             $db->query("
                 UPDATE aircraft_seen
                 SET
+                    landed_at_keau = {$landedAtKEAU},
                     min_altitude = MIN(min_altitude, {$aircraft->alt_geom}),
                     max_altitude = MAX(max_altitude, {$aircraft->alt_geom}),
                     min_speed = MIN(min_speed, {$aircraft->gs}),
@@ -126,9 +157,9 @@
         } else {
             $db->query("
                 INSERT INTO aircraft_seen
-                    (hex, min_altitude, max_altitude, min_speed, max_speed, min_distance, max_distance, seen_count, first_seen, last_seen)
+                    (hex, landed_at_keau, min_altitude, max_altitude, min_speed, max_speed, min_distance, max_distance, seen_count, first_seen, last_seen)
                 VALUES
-                    ('{$aircraft->hex}', {$aircraft->alt_geom}, {$aircraft->alt_geom}, {$aircraft->gs}, {$aircraft->gs}, {$distance}, {$distance}, 1, datetime('now'), datetime('now'))");
+                    ('{$aircraft->hex}', {$landedAtKEAU}, {$aircraft->alt_geom}, {$aircraft->alt_geom}, {$aircraft->gs}, {$aircraft->gs}, {$distance}, {$distance}, 1, datetime('now'), datetime('now'))");
         }
     }
 
@@ -187,17 +218,18 @@
 
         $db->exec('
             CREATE TABLE IF NOT EXISTS "aircraft_seen" (
-                "id"	        INTEGER UNIQUE,
-                "hex"	        TEXT UNIQUE,
-                "min_altitude"	INTEGER,
-                "max_altitude"	INTEGER,
-                "min_speed"	    INTEGER,
-                "max_speed"	    INTEGER,
-                "min_distance"	INTEGER,
-                "max_distance"	INTEGER,
-                "seen_count"	INTEGER,
-                "first_seen"	TEXT,
-                "last_seen"	    TEXT,
+                "id"	            INTEGER UNIQUE,
+                "hex"	            TEXT UNIQUE,
+                "landed_at_keau"    TINYINT,
+                "min_altitude"	    INTEGER,
+                "max_altitude"	    INTEGER,
+                "min_speed"	        INTEGER,
+                "max_speed"	        INTEGER,
+                "min_distance"	    INTEGER,
+                "max_distance"	    INTEGER,
+                "seen_count"	    INTEGER,
+                "first_seen"	    TEXT,
+                "last_seen"	        TEXT,
                 PRIMARY KEY("id" AUTOINCREMENT)
         )');
     }
