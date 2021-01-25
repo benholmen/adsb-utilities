@@ -190,11 +190,12 @@
         while ($aircraft = $result->fetchArray(SQLITE3_ASSOC)) {
             $min_distance = number_format($aircraft['min_distance'], 1);
 
-            $link = 'https://globe.adsbexchange.com/?icao=' . strtolower($aircraft['hex']);
+            $link_adsbx = 'https://globe.adsbexchange.com/?icao=' . strtolower($aircraft['hex']);
+            $link_fa = 'https://flightaware.com/live/modes/' . strtolower($aircraft['hex']) .'/ident/wat/redirect';
 
             $landed_at_keau = $aircraft['landed_at_keau'] ? 'Y' : '';
 
-            echo "{$aircraft['hex']}\t{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$landed_at_keau}\t{$min_distance}\t\t{$link}\n";
+            echo "{$aircraft['hex']}\t{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$landed_at_keau}\t{$min_distance}\t\t{$link_adsbx} {$link_fa}\n";
 
             $count++;
         }
