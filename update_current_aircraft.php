@@ -6,8 +6,11 @@
     define('JSON_DATABASE_URL', 'https://raw.githubusercontent.com/Mictronics/readsb-protobuf/dev/webapp/src/db/aircrafts.json');
     define('DB_FILE', dirname(__FILE__) . '/aircraft.db');
     define('TMP_DB_FILE', '/dev/shm/aircraft-tmp.db'); // much faster to initialize database in memory
-    define('LAT_HOME',  44.8267759);
-    define('LON_HOME', -91.5326822);
+    define('LAT_HOME',  44.826776);
+    define('LON_HOME', -91.532682);
+    define('LAT_KEAU',  44.865833);
+    define('LON_KEAU', -91.484167);
+    define('ALT_KEAU', 913);
 
     /** USAGE
      *  Before running the first time, run aircraft_stats.php --init to create a new SQLite DB
@@ -60,6 +63,7 @@
     while ($keepOnLooping) {
         $currentAircraftReadable = [];
         $allAdsbAircraft = json_decode(file_get_contents(SOURCE_FILE))->aircraft;
+
         foreach ($allAdsbAircraft as $adsbAircraft) {
             // Always use upper case for ICAO hex ID
             $adsbAircraft->hex = strtoupper($adsbAircraft->hex);
@@ -95,13 +99,13 @@
                 return false;
             }
         }
-        return false;
+        return true;
     }
 
     function areTheyAtKEAU($aircraft): bool
     {
         global $db;
-        $MAX_ALTITUDE = 1500;
+        $MAX_ALTITUDE = ALT_KEAU + 500;
         $MAX_DISTANCE = 1;
 
         if (!hasEnoughData($aircraft)) {
@@ -127,6 +131,8 @@
 
         $distance = distanceBetween($aircraft->lat, $aircraft->lon, LAT_HOME, LON_HOME);
 
+        $landedAtKEAU = intval(areTheyAtKEAU($aircraft));
+
         if ($dbAircraft = getAircraft($aircraft->hex)) {
             $seenCount = $dbAircraft['seen_count'];
             $timeSinceLastSeen = time() - strtotime($dbAircraft['last_seen'] . ' UTC');
@@ -134,10 +140,7 @@
                 $seenCount++;
             }
 
-            $landedAtKEAU = $dbAircraft['landed_at_keau'];
-            if (!$landedAtKEAU) {
-                $landedAtKEAU = areTheyAtKEAU($aircraft);
-            }
+            $landedAtKEAU = $landedAtKEAU ? $landedAtKEAU : $dbAircraft['landed_at_keau'];
 
             $db->query("
                 UPDATE aircraft_seen
@@ -179,15 +182,19 @@
             ORDER BY seen_count DESC, last_seen DESC, min_distance ASC
             LIMIT 50");
 
-        echo "\nHEX\tTAIL\tTYPE\tSEEN\tMIN DISTANCE\tLINK\n";
-        echo "---\t----\t----\t----\t------------\t----\n";
+        echo "\nHEX\tTAIL\tTYPE\tSEEN\tKEAU\tMIN DISTANCE\tLINK\n";
+        echo "---\t----\t----\t----\t----\t------------\t----\n";
 
         $count = 0;
 
         while ($aircraft = $result->fetchArray(SQLITE3_ASSOC)) {
             $min_distance = number_format($aircraft['min_distance'], 1);
+
             $link = 'https://globe.adsbexchange.com/?icao=' . strtolower($aircraft['hex']);
-            echo "{$aircraft['hex']}\t{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$min_distance}\t\t{$link}\n";
+
+            $landed_at_keau = $aircraft['landed_at_keau'] ? 'Y' : '';
+
+            echo "{$aircraft['hex']}\t{$aircraft['tail']}\t{$aircraft['type']}\t{$aircraft['seen_count']}\t{$landed_at_keau}\t{$min_distance}\t\t{$link}\n";
 
             $count++;
         }
@@ -218,18 +225,18 @@
 
         $db->exec('
             CREATE TABLE IF NOT EXISTS "aircraft_seen" (
-                "id"	            INTEGER UNIQUE,
-                "hex"	            TEXT UNIQUE,
+                "id"                INTEGER UNIQUE,
+                "hex"                TEXT UNIQUE,
                 "landed_at_keau"    TINYINT,
-                "min_altitude"	    INTEGER,
-                "max_altitude"	    INTEGER,
-                "min_speed"	        INTEGER,
-                "max_speed"	        INTEGER,
-                "min_distance"	    INTEGER,
-                "max_distance"	    INTEGER,
-                "seen_count"	    INTEGER,
-                "first_seen"	    TEXT,
-                "last_seen"	        TEXT,
+                "min_altitude"        INTEGER,
+                "max_altitude"        INTEGER,
+                "min_speed"            INTEGER,
+                "max_speed"            INTEGER,
+                "min_distance"        INTEGER,
+                "max_distance"        INTEGER,
+                "seen_count"        INTEGER,
+                "first_seen"        TEXT,
+                "last_seen"            TEXT,
                 PRIMARY KEY("id" AUTOINCREMENT)
         )');
     }
@@ -241,12 +248,12 @@
         $db->exec("DROP TABLE IF EXISTS aircraft_meta");
         $db->exec('
             CREATE TABLE "aircraft_meta" (
-                "id"	        INTEGER UNIQUE,
-                "hex"	        TEXT UNIQUE,
+                "id"            INTEGER UNIQUE,
+                "hex"            TEXT UNIQUE,
                 "hex_to_int"    INTEGER UNIQUE,
-                "tail"	        TEXT,
-                "type"	        TEXT,
-                "updated"	    TEXT,
+                "tail"            TEXT,
+                "type"            TEXT,
+                "updated"        TEXT,
                 PRIMARY KEY("id" AUTOINCREMENT)
                 UNIQUE("hex")
                 UNIQUE("hex_to_int")
